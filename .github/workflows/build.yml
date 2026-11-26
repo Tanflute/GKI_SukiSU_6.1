@@ -675,7 +675,7 @@ jobs:
             ! grep -qF 'if (status->policyload > 0)' "$HIDE_C"
            ! grep -qE '^[[:space:]]*avd\.seqno[[:space:]]*=[[:space:]]*1;' "$HIDE_C"
            ! grep -qE '^[[:space:]]*[^[:space:]/].*selinux_status_update_policyload\(' "$RULES_C"
-           grep -qF '#if !defined(CONFIG_KSU_SUSFS) || !defined(KSU_SUSFS_HAS_TYPE_REGISTRATION)' "$RULES_C"
+           [ "$(grep -cF '#if !defined(CONFIG_KSU_SUSFS) || !defined(KSU_SUSFS_HAS_TYPE_REGISTRATION)' "$RULES_C")" -ge 2 ] || { echo "::error::missing generation guard in rules.c"; exit 1; }
             grep -qF '#error "KSU_SUSFS_HAS_TYPE_REGISTRATION not defined!"' "$RULES_C"
             grep -qF 'KSU_SUSFS_HAS_TYPE_REGISTRATION' "$KERNEL_ROOT/KernelSU/kernel/Makefile"
             grep -qF 'if (!usrdatum)' "$HIDE_C"

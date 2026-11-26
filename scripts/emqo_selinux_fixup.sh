@@ -92,7 +92,7 @@ generation_guard = """#if !defined(CONFIG_KSU_SUSFS) || !defined(KSU_SUSFS_HAS_T
     if (!ksu_set_original_types(db, &old_pol->policydb, pol->latest_granting))
         pr_warn(\"failed to save original type metadata, use backup lookups\\n\");
 #endif"""
-if 'ksu_set_original_types(db, &old_pol->policydb' in r and 'KSU_SUSFS_HAS_TYPE_REGISTRATION' not in r:
+if 'ksu_set_original_types(db, &old_pol->policydb' in r and generation_guard not in r:
     r = r.replace('    pol->latest_granting = old_pol->latest_granting + 1;\n'
                   '    if (!ksu_set_original_types(db, &old_pol->policydb, pol->latest_granting))\n'
                   '        pr_warn(\"failed to save original type metadata, use backup lookups\\n\");',
@@ -103,11 +103,14 @@ advance_guard = """#if !defined(CONFIG_KSU_SUSFS) || !defined(KSU_SUSFS_HAS_TYPE
     if (!ksu_advance_original_types(db, &old_pol->policydb, old_pol->latest_granting, pol->latest_granting))
         pr_warn(\"failed to carry original type metadata, use backup lookups\\n\");
 #endif"""
-if 'ksu_advance_original_types(db, &old_pol->policydb' in r and '#if !defined(CONFIG_KSU_SUSFS)' not in r:
+if 'ksu_advance_original_types(db, &old_pol->policydb' in r and advance_guard not in r:
     r = r.replace('    pol->latest_granting = old_pol->latest_granting + 1;\n'
                   '    if (!ksu_advance_original_types(db, &old_pol->policydb, old_pol->latest_granting, pol->latest_granting))\n'
                   '        pr_warn(\"failed to carry original type metadata, use backup lookups\\n\");',
                   advance_guard, 1)
+
+if r.count('#if !defined(CONFIG_KSU_SUSFS) || !defined(KSU_SUSFS_HAS_TYPE_REGISTRATION)') < 2:
+    raise SystemExit('expected both apply_kernelsu_rules and handle_sepolicy generation guards in rules.c')
 
 r = r.replace('    reset_avc_cache(pol->latest_granting);',
                 '#ifdef KSU_SUSFS_HAS_TYPE_REGISTRATION\n    reset_avc_cache(0);\n#else\n    reset_avc_cache(pol->latest_granting);\n#endif')
