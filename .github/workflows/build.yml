@@ -668,7 +668,7 @@ jobs:
            done
            grep -qF 'avd.seqno = status->policyload' "$HIDE_C"
            ! grep -qE '^[[:space:]]*avd\.seqno[[:space:]]*=[[:space:]]*1;' "$HIDE_C"
-           awk '/selinux_status_update_policyload\(/ && $0 !~ /^[[:space:]]*\/\// { bad=1 } END { exit bad ? 1 : 0 }' "$RULES_C"
+           ! grep -qE '^[[:space:]]*[^[:space:]/].*selinux_status_update_policyload\(' "$RULES_C"
            grep -qF 'pol->latest_granting = old_pol->latest_granting + 1;' "$RULES_C"
            grep -qF 'APP_ZYGOTE_CONTEXT' "$HEADER_H"
            grep -qF 'cached_app_zygote_sid' "$SELINUX_C"

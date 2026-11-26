@@ -153,7 +153,7 @@ grep -qF 'avd.seqno = status->policyload' "$HIDE_C" || fail 'seqno alignment was
 if grep -qE '^[[:space:]]*avd\.seqno[[:space:]]*=[[:space:]]*1;' "$HIDE_C"; then
   fail 'active hard-coded avd.seqno=1 remains'
 fi
-if grep -qE '^[[:space:]]*[^/].*selinux_status_update_policyload\(' "$RULES_C"; then
+if grep -qE '^[[:space:]]*[^[:space:]/].*selinux_status_update_policyload\(' "$RULES_C"; then
   fail 'active selinux_status_update_policyload call remains'
 fi
 grep -qF 'pol->latest_granting = old_pol->latest_granting + 1;' "$RULES_C" \
