@@ -65,6 +65,9 @@ if 'avd.seqno = status->policyload' not in h:
         raise SystemExit('cannot find the active avd.seqno=1 assignment')
     h = h2
 
+# Match FinaSU v1.6.3 for empty/newline-only setprocattr values.
+h = h.replace("if (size && str[0]) {", "if (size && str[0] && str[0] != '\\n') {", 1)
+
 # Disable only the status-page policyload publication calls. Keep
 # policy generation follows SUSFS registration when available; otherwise the
 # native original-type bookkeeping remains enabled.
@@ -108,6 +111,15 @@ if 'ksu_advance_original_types(db, &old_pol->policydb' in r and '#if !defined(CO
 
 r = r.replace('    reset_avc_cache(pol->latest_granting);',
                 '#ifdef KSU_SUSFS_HAS_TYPE_REGISTRATION\n    reset_avc_cache(0);\n#else\n    reset_avc_cache(pol->latest_granting);\n#endif')
+
+# Fail at compile time if SUSFS is enabled but the registration probe did not
+# define the generation guard macro. This prevents a silent Makefile mismatch.
+compile_assert = '''\n#ifdef CONFIG_KSU_SUSFS\n#ifndef KSU_SUSFS_HAS_TYPE_REGISTRATION\n#error "KSU_SUSFS_HAS_TYPE_REGISTRATION not defined!"\n#endif\n#endif\n'''
+if '#error "KSU_SUSFS_HAS_TYPE_REGISTRATION not defined!"' not in r:
+    anchor = '#define ALL NULL'
+    if anchor not in r:
+        raise SystemExit('cannot locate rules.c ALL macro anchor')
+    r = r.replace(anchor, anchor + compile_assert, 1)
 
 # Teach builtin SukiSU's Makefile to detect the SUSFS v2.4 registration API.
 # The probe is evaluated in the common kernel tree, not in KernelSU itself.
@@ -198,8 +210,18 @@ if grep -qE '^[[:space:]]*[^[:space:]/].*selinux_status_update_policyload\(' "$R
 fi
 grep -qF '#if !defined(CONFIG_KSU_SUSFS) || !defined(KSU_SUSFS_HAS_TYPE_REGISTRATION)' "$RULES_C" \
   || fail 'SUSFS latest_granting guard is missing'
+grep -qF '#error "KSU_SUSFS_HAS_TYPE_REGISTRATION not defined!"' "$RULES_C" \
+  || fail 'compile-time SUSFS registration assertion is missing'
 grep -qF 'KSU_SUSFS_HAS_TYPE_REGISTRATION' "$KSU_ROOT/kernel/Makefile" \
   || fail 'SUSFS registration probe is missing from KernelSU Makefile'
+grep -qF 'if (!usrdatum)' "$HIDE_C" \
+  || fail 'unknown SELinux user parser early return is missing'
+grep -qF 'if (!role)' "$HIDE_C" \
+  || fail 'unknown SELinux role parser early return is missing'
+grep -qF 'memcpy(p, source + offset' "$HIDE_C" \
+  || fail 'original SELinux context source restoration is missing'
+grep -qF "if (size && str[0] && str[0] != '\\n')" "$HIDE_C" \
+  || fail 'my_setprocattr empty/newline handling is missing'
 grep -qF 'APP_ZYGOTE_CONTEXT' "$SELINUX_H" \
   || fail 'APP_ZYGOTE_CONTEXT is missing'
 grep -qF 'cached_app_zygote_sid' "$SELINUX_C" \
