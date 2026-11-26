@@ -91,6 +91,15 @@ if grep -qF 'ksu_install_su_fd();' fs/exec.c; then
 elif grep -qF 'ksu_handle_post_execveat_sucompat(' fs/exec.c; then
   EXEC_HELPER="ksu_handle_post_execveat_sucompat"
 fi
+# New SukiSU-Nova exposes the exec/su-session helpers in kernel/feature and
+# kernel/supercall rather than the old fs/exec.c ABI. Do not run the legacy
+# source-rewrite fallback against that layout; it would delete nothing and
+# then abort on the still-valid new helper names.
+if grep -RqsF 'ksu_handle_execveat_sucompat' "$KERNEL_ROOT/KernelSU/kernel" \
+  && grep -RqsF 'ksu_install_su_fd' "$KERNEL_ROOT/KernelSU/kernel"; then
+  echo "$KSU_VARIANT 新 exec/session-FD ABI 已存在，跳过旧版 exec hook 兼容分支"
+  EXEC_HELPER=""
+fi
 if [[ -n "$EXEC_HELPER" ]] \
   && ! grep -RqsE --include='*.c' "^[[:space:]]*int[[:space:]]+${EXEC_HELPER}[[:space:]]*\(" "$KERNEL_ROOT/KernelSU/kernel"; then
   echo "$KSU_VARIANT 尚未提供 $EXEC_HELPER，恢复旧版 exec hook"
