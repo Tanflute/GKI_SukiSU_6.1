@@ -28,7 +28,7 @@ jobs:
       susVer: ${{ steps.get_version.outputs.sversion }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      REPO: SukiSU-Ultra/SukiSU-Ultra
+      REPO: SukiSU-Nova/SukiSU-Nova
       USE_SUSFS: ${{ inputs.use_susfs }}
 
     steps:
@@ -46,7 +46,7 @@ jobs:
           else
             KSU_BRANCH=main
           fi
-          git clone -b "$KSU_BRANCH" https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
+          git clone -b "$KSU_BRANCH" https://github.com/SukiSU-Nova/SukiSU-Nova.git KernelSU
 
           cd KernelSU
           KSU_GIT_VERSION=$(git rev-list --count HEAD)

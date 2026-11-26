@@ -487,8 +487,8 @@ jobs:
         id: ksu
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
-          echo "添加 SukiSU Ultra..."
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash $BRANCH
+          echo "添加 SukiSU-Nova builtin..."
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Nova/SukiSU-Nova/main/kernel/setup.sh" | bash $BRANCH
 
           if [ -d "KernelSU/.git" ]; then
             KSU_LATEST_COMMIT_DATE=$(git -C KernelSU log -1 --date=format:'%Y-%m-%d %H:%M:%S %z' --format='%cd')
@@ -640,6 +640,44 @@ jobs:
         if: inputs.use_susfs
         working-directory: ${{ env.KERNEL_ROOT }}
         run: bash "$GITHUB_WORKSPACE/scripts/susfs_fixes/apply.sh"
+
+      - name: 应用 Emqo SELinux 侧信道修复
+        if: inputs.use_susfs
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: bash "$GITHUB_WORKSPACE/scripts/emqo_selinux_fixup.sh"
+
+      - name: 编译前硬断言
+        if: inputs.use_susfs
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: |
+           set -euo pipefail
+           test "$ANDROID_VERSION" = "android14"
+           test "$KERNEL_VERSION" = "6.1"
+           test "$SUB_LEVEL" = "138"
+           test "$OS_PATCH_LEVEL" = "2025-06"
+           HIDE_C="$KERNEL_ROOT/KernelSU/kernel/feature/selinux_hide.c"
+           RULES_C="$KERNEL_ROOT/KernelSU/kernel/selinux/rules.c"
+           HEADER_H="$KERNEL_ROOT/KernelSU/kernel/selinux/selinux.h"
+           SELINUX_C="$KERNEL_ROOT/KernelSU/kernel/selinux/selinux.c"
+           ALLOWLIST_H="$KERNEL_ROOT/KernelSU/kernel/policy/allowlist.h"
+           for f in "$HIDE_C" "$RULES_C" "$HEADER_H" "$SELINUX_C" "$ALLOWLIST_H"; do
+             test -f "$f" || { echo "::error::missing assertion target $f"; exit 1; }
+           done
+           for symbol in my_write_context my_write_access my_setprocattr; do
+             grep -qF "$symbol" "$HIDE_C" || { echo "::error::missing $symbol"; exit 1; }
+           done
+           grep -qF 'avd.seqno = status->policyload' "$HIDE_C"
+           ! grep -qE '^[[:space:]]*avd\.seqno[[:space:]]*=[[:space:]]*1;' "$HIDE_C"
+           awk '/selinux_status_update_policyload\(/ && $0 !~ /^[[:space:]]*\/\// { bad=1 } END { exit bad ? 1 : 0 }' "$RULES_C"
+           grep -qF 'pol->latest_granting = old_pol->latest_granting + 1;' "$RULES_C"
+           grep -qF 'APP_ZYGOTE_CONTEXT' "$HEADER_H"
+           grep -qF 'cached_app_zygote_sid' "$SELINUX_C"
+           grep -qF 'FIRST_APP_ZYGOTE_ISOLATED_UID 90000' "$ALLOWLIST_H"
+           grep -qF 'LAST_APP_ZYGOTE_ISOLATED_UID 98999' "$ALLOWLIST_H"
+           grep -RqsF 'inode_setxattr' "$KERNEL_ROOT/KernelSU/kernel"
+           test "$(git -C "$KERNEL_ROOT/KernelSU" rev-parse HEAD)" = "5b6262e860b6beb646d4385431b748fb7330f62c"
+           test "$(git -C "$KERNEL_ROOT/susfs4ksu" rev-parse HEAD)" = "f76b81f2a6bf98e4029cc0c823c054edbec29803"
+           echo "All Emqo SELinux/SUSFS/#3996/app_zygote assertions passed"
 
       - name: 备份基准 defconfig
         run: cp "$DEFCONFIG" "$DEFCONFIG.orig"

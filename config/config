@@ -9,10 +9,11 @@
 # ================================================================
 
 # 是否启用自定义提交 (true/false)
-custom=false
+custom=true
 
-# SUSFS 的 commit hash（仅 custom=true 时生效）
-gki-android14-6.1=
+# SUSFS v2.4.0 commit used by Emqo r3 / gki-android14-6.1
+# (latest_granting + inode_setxattr SUSFS integration)
+gki-android14-6.1=f76b81f2a6bf98e4029cc0c823c054edbec29803
 
-# SukiSU 的 commit hash（仅 custom=true 时生效）
-sukisu=
+# SukiSU-Nova commit containing KernelSU #3996 inode_setxattr hook
+sukisu=5b6262e860b6beb646d4385431b748fb7330f62c
