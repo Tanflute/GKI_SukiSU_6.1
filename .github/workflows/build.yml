@@ -676,7 +676,7 @@ jobs:
            grep -qF 'LAST_APP_ZYGOTE_ISOLATED_UID 98999' "$ALLOWLIST_H"
            grep -RqsF 'inode_setxattr' "$KERNEL_ROOT/KernelSU/kernel"
            test "$(git -C "$KERNEL_ROOT/KernelSU" rev-parse HEAD)" = "5b6262e860b6beb646d4385431b748fb7330f62c"
-           test "$(git -C "$KERNEL_ROOT/susfs4ksu" rev-parse HEAD)" = "f76b81f2a6bf98e4029cc0c823c054edbec29803"
+           test "$(git -C "$SUSFS4KSU" rev-parse HEAD)" = "f76b81f2a6bf98e4029cc0c823c054edbec29803"
            echo "All Emqo SELinux/SUSFS/#3996/app_zygote assertions passed"
 
       - name: 备份基准 defconfig
