@@ -15,5 +15,5 @@ custom=true
 # (latest_granting + inode_setxattr SUSFS integration)
 gki-android14-6.1=f76b81f2a6bf98e4029cc0c823c054edbec29803
 
-# SukiSU-Nova commit containing KernelSU #3996 inode_setxattr hook
-sukisu=5b6262e860b6beb646d4385431b748fb7330f62c
+# SukiSU-Nova builtin branch head; build.yml cherry-picks #3996 on top
+sukisu=4bec532dd447e2852aa8932afa768255350c103a

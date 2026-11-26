@@ -490,6 +490,16 @@ jobs:
           echo "添加 SukiSU-Nova builtin..."
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Nova/SukiSU-Nova/main/kernel/setup.sh" | bash $BRANCH
 
+          # Keep the builtin branch (including CONFIG_KSU_SUSFS*) and apply
+          # KernelSU #3996 as a real cherry-pick on top. A conflict aborts the
+          # job before SUSFS or kernel compilation can produce a weak artifact.
+          KSU_INODE_HOOK_COMMIT="5b6262e860b6beb646d4385431b748fb7330f62c"
+          if ! git -C KernelSU cat-file -e "${KSU_INODE_HOOK_COMMIT}^{commit}" 2>/dev/null; then
+            git -C KernelSU fetch --no-tags origin "$KSU_INODE_HOOK_COMMIT"
+          fi
+          git -C KernelSU cherry-pick "$KSU_INODE_HOOK_COMMIT"
+          echo "Applied KernelSU #3996: $KSU_INODE_HOOK_COMMIT"
+
           if [ -d "KernelSU/.git" ]; then
             KSU_LATEST_COMMIT_DATE=$(git -C KernelSU log -1 --date=format:'%Y-%m-%d %H:%M:%S %z' --format='%cd')
             echo "KSU_LATEST_COMMIT_DATE=$KSU_LATEST_COMMIT_DATE" >> $GITHUB_ENV
@@ -675,7 +685,8 @@ jobs:
            grep -qF 'FIRST_APP_ZYGOTE_ISOLATED_UID 90000' "$ALLOWLIST_H"
            grep -qF 'LAST_APP_ZYGOTE_ISOLATED_UID 98999' "$ALLOWLIST_H"
            grep -RqsF 'inode_setxattr' "$KERNEL_ROOT/KernelSU/kernel"
-           test "$(git -C "$KERNEL_ROOT/KernelSU" rev-parse HEAD)" = "5b6262e860b6beb646d4385431b748fb7330f62c"
+           grep -qF 'config KSU_SUSFS' "$KERNEL_ROOT/KernelSU/kernel/Kconfig"
+           git -C "$KERNEL_ROOT/KernelSU" log --format='%s' -n 20 | grep -qF 'feat(kernel): Add LSM hook for inode_setxattr'
            test "$(git -C "$SUSFS4KSU" rev-parse HEAD)" = "f76b81f2a6bf98e4029cc0c823c054edbec29803"
            echo "All Emqo SELinux/SUSFS/#3996/app_zygote assertions passed"
 
