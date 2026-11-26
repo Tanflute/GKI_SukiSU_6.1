@@ -671,10 +671,12 @@ jobs:
            for symbol in my_write_context my_write_access my_setprocattr; do
              grep -qF "$symbol" "$HIDE_C" || { echo "::error::missing $symbol"; exit 1; }
            done
-           grep -qF 'avd.seqno = status->policyload' "$HIDE_C"
+           grep -qF 'avd.seqno = status->policyload;' "$HIDE_C"
+            ! grep -qF 'if (status->policyload > 0)' "$HIDE_C"
            ! grep -qE '^[[:space:]]*avd\.seqno[[:space:]]*=[[:space:]]*1;' "$HIDE_C"
            ! grep -qE '^[[:space:]]*[^[:space:]/].*selinux_status_update_policyload\(' "$RULES_C"
-           grep -qF 'pol->latest_granting = old_pol->latest_granting + 1;' "$RULES_C"
+           grep -qF '#if !defined(CONFIG_KSU_SUSFS) || !defined(KSU_SUSFS_HAS_TYPE_REGISTRATION)' "$RULES_C"
+            grep -qF 'KSU_SUSFS_HAS_TYPE_REGISTRATION' "$KERNEL_ROOT/KernelSU/kernel/Makefile"
            grep -qF 'APP_ZYGOTE_CONTEXT' "$HEADER_H"
            grep -qF 'cached_app_zygote_sid' "$SELINUX_C"
            grep -qF 'FIRST_APP_ZYGOTE_ISOLATED_UID 90000' "$ALLOWLIST_H"
@@ -682,7 +684,7 @@ jobs:
            grep -RqsE 'susfs_selinux_inode_setxattr|handle_selinux_inode_setxattr' "$KERNEL_ROOT/common"
            grep -qF 'config KSU_SUSFS' "$KERNEL_ROOT/KernelSU/kernel/Kconfig"
            test "$(git -C "$SUSFS4KSU" rev-parse HEAD)" = "f76b81f2a6bf98e4029cc0c823c054edbec29803"
-           echo "All Emqo SELinux/SUSFS/#3996/app_zygote assertions passed"
+           echo "All Emqo SELinux/SUSFS/generation/app_zygote assertions passed"
 
       - name: 备份基准 defconfig
         run: cp "$DEFCONFIG" "$DEFCONFIG.orig"

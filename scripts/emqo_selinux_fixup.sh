@@ -12,9 +12,10 @@ RULES_C="$KSU_ROOT/kernel/selinux/rules.c"
 SELINUX_H="$KSU_ROOT/kernel/selinux/selinux.h"
 SELINUX_C="$KSU_ROOT/kernel/selinux/selinux.c"
 ALLOWLIST_H="$KSU_ROOT/kernel/policy/allowlist.h"
+MAKEFILE="$KSU_ROOT/kernel/Makefile"
 
 fail() { echo "::error::Emqo SELinux fixup: $*"; exit 1; }
-for f in "$HIDE_C" "$RULES_C" "$SELINUX_H" "$SELINUX_C" "$ALLOWLIST_H"; do
+for f in "$HIDE_C" "$RULES_C" "$SELINUX_H" "$SELINUX_C" "$ALLOWLIST_H" "$MAKEFILE"; do
   [ -f "$f" ] || fail "missing target file: $f"
 done
 
@@ -30,15 +31,17 @@ for symbol in my_write_context my_write_access my_setprocattr; do
   fi
 done
 
-python3 - "$HIDE_C" "$RULES_C" <<'PY'
+python3 - "$HIDE_C" "$RULES_C" "$KSU_ROOT/kernel/Makefile" <<'PY'
 from pathlib import Path
 import re
 import sys
 
 hide = Path(sys.argv[1])
 rules = Path(sys.argv[2])
+makefile = Path(sys.argv[3])
 h = hide.read_text()
 r = rules.read_text()
+m = makefile.read_text()
 
 # Align the access response with the status page policy generation. The
 # upstream SukiSU #3877-era code hard-coded avd.seqno=1, which creates the
@@ -48,8 +51,7 @@ if 'avd.seqno = status->policyload' not in h:
         struct page *spage = selinux_kernel_status_page(&selinux_state);
         if (spage) {
             struct selinux_kernel_status *status = page_address(spage);
-            if (status->policyload > 0)
-                avd.seqno = status->policyload;
+            avd.seqno = status->policyload;
         }
     }
 '''
@@ -64,8 +66,8 @@ if 'avd.seqno = status->policyload' not in h:
     h = h2
 
 # Disable only the status-page policyload publication calls. Keep
-# pol->latest_granting = old_pol->latest_granting + 1 intact; that is the
-# correct generation bookkeeping used by the policy object itself.
+# policy generation follows SUSFS registration when available; otherwise the
+# native original-type bookkeeping remains enabled.
 new_lines = []
 for line in r.splitlines(True):
     stripped = line.lstrip()
@@ -77,6 +79,40 @@ for line in r.splitlines(True):
         line = indent + '// Emqo Maple seqno fix: ' + stripped
     new_lines.append(line)
 r = ''.join(new_lines)
+
+# SUSFS v2.4 registers the injected types in common/fs/susfs.c. In that mode,
+# incrementing policy->latest_granting creates the Maple generation split: the
+# status page is intentionally fake while access still exposes the incremented
+# live generation. Match FinaSU's registration guard for both policy paths.
+generation_guard = """#if !defined(CONFIG_KSU_SUSFS) || !defined(KSU_SUSFS_HAS_TYPE_REGISTRATION)
+    pol->latest_granting = old_pol->latest_granting + 1;
+    if (!ksu_set_original_types(db, &old_pol->policydb, pol->latest_granting))
+        pr_warn(\"failed to save original type metadata, use backup lookups\\n\");
+#endif"""
+if 'ksu_set_original_types(db, &old_pol->policydb' in r and 'KSU_SUSFS_HAS_TYPE_REGISTRATION' not in r:
+    r = r.replace('    pol->latest_granting = old_pol->latest_granting + 1;\n'
+                  '    if (!ksu_set_original_types(db, &old_pol->policydb, pol->latest_granting))\n'
+                  '        pr_warn(\"failed to save original type metadata, use backup lookups\\n\");',
+                  generation_guard, 1)
+
+advance_guard = """#if !defined(CONFIG_KSU_SUSFS) || !defined(KSU_SUSFS_HAS_TYPE_REGISTRATION)
+    pol->latest_granting = old_pol->latest_granting + 1;
+    if (!ksu_advance_original_types(db, &old_pol->policydb, old_pol->latest_granting, pol->latest_granting))
+        pr_warn(\"failed to carry original type metadata, use backup lookups\\n\");
+#endif"""
+if 'ksu_advance_original_types(db, &old_pol->policydb' in r and '#if !defined(CONFIG_KSU_SUSFS)' not in r:
+    r = r.replace('    pol->latest_granting = old_pol->latest_granting + 1;\n'
+                  '    if (!ksu_advance_original_types(db, &old_pol->policydb, old_pol->latest_granting, pol->latest_granting))\n'
+                  '        pr_warn(\"failed to carry original type metadata, use backup lookups\\n\");',
+                  advance_guard, 1)
+
+r = r.replace('    reset_avc_cache(pol->latest_granting);',
+                '#ifdef KSU_SUSFS_HAS_TYPE_REGISTRATION\n    reset_avc_cache(0);\n#else\n    reset_avc_cache(pol->latest_granting);\n#endif')
+
+# Teach builtin SukiSU's Makefile to detect the SUSFS v2.4 registration API.
+# The probe is evaluated in the common kernel tree, not in KernelSU itself.
+if 'KSU_SUSFS_HAS_TYPE_REGISTRATION' not in m:
+    m += '''\n\nifeq ($(CONFIG_KSU_SUSFS),y)\nSUSFS_REGISTRATION_PROBE := $(shell grep -q 'susfs_add_sus_type' $(srctree)/fs/susfs.c 2>/dev/null; echo $$?)\nifeq ($(SUSFS_REGISTRATION_PROBE),0)\nccflags-y += -DKSU_SUSFS_HAS_TYPE_REGISTRATION=1\nendif\nendif\n'''
 
 # Prevent a later policy publication from overwriting the original backup
 # policy used by selinux_hide validation.
@@ -95,6 +131,7 @@ if 'if (!backup_sepolicy)' not in r:
 
 hide.write_text(h)
 rules.write_text(r)
+makefile.write_text(m)
 PY
 
 # Add app_zygote as a zygote-equivalent context for hide decisions. The UID
@@ -149,15 +186,20 @@ PY
 for symbol in my_write_context my_write_access my_setprocattr; do
   grep -qF "$symbol" "$HIDE_C" || fail "missing hide hook symbol: $symbol"
 done
-grep -qF 'avd.seqno = status->policyload' "$HIDE_C" || fail 'seqno alignment was not applied'
+grep -qF 'avd.seqno = status->policyload;' "$HIDE_C" || fail 'seqno alignment was not applied'
+if grep -qF 'if (status->policyload > 0)' "$HIDE_C"; then
+  fail 'seqno alignment still ignores policyload=0'
+fi
 if grep -qE '^[[:space:]]*avd\.seqno[[:space:]]*=[[:space:]]*1;' "$HIDE_C"; then
   fail 'active hard-coded avd.seqno=1 remains'
 fi
 if grep -qE '^[[:space:]]*[^[:space:]/].*selinux_status_update_policyload\(' "$RULES_C"; then
   fail 'active selinux_status_update_policyload call remains'
 fi
-grep -qF 'pol->latest_granting = old_pol->latest_granting + 1;' "$RULES_C" \
-  || fail 'correct pol->latest_granting generation update is missing'
+grep -qF '#if !defined(CONFIG_KSU_SUSFS) || !defined(KSU_SUSFS_HAS_TYPE_REGISTRATION)' "$RULES_C" \
+  || fail 'SUSFS latest_granting guard is missing'
+grep -qF 'KSU_SUSFS_HAS_TYPE_REGISTRATION' "$KSU_ROOT/kernel/Makefile" \
+  || fail 'SUSFS registration probe is missing from KernelSU Makefile'
 grep -qF 'APP_ZYGOTE_CONTEXT' "$SELINUX_H" \
   || fail 'APP_ZYGOTE_CONTEXT is missing'
 grep -qF 'cached_app_zygote_sid' "$SELINUX_C" \
