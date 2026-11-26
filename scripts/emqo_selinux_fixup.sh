@@ -166,7 +166,7 @@ grep -qF 'FIRST_APP_ZYGOTE_ISOLATED_UID 90000' "$ALLOWLIST_H" \
   || fail 'app_zygote UID lower bound is missing'
 grep -qF 'LAST_APP_ZYGOTE_ISOLATED_UID 98999' "$ALLOWLIST_H" \
   || fail 'app_zygote UID upper bound is missing'
-grep -RqsF 'inode_setxattr' "$KSU_ROOT/kernel" \
-  || fail 'KernelSU #3996 inode_setxattr hook is missing'
+grep -RqsE 'susfs_selinux_inode_setxattr|handle_selinux_inode_setxattr' "$COMMON" \
+  || fail 'SUSFS f76b81f inode_setxattr hook is missing from common/'
 
 echo '[Emqo fixup] all SELinux/app_zygote/inode_setxattr assertions passed'
