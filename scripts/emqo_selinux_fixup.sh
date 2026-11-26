@@ -45,7 +45,7 @@ r = rules.read_text()
 # exact status/access split Maple probes after runtime policy publication.
 if 'avd.seqno = status->policyload' not in h:
     block = '''    {
-        struct page *spage = selinux_kernel_status_page();
+        struct page *spage = selinux_kernel_status_page(&selinux_state);
         if (spage) {
             struct selinux_kernel_status *status = page_address(spage);
             if (status->policyload > 0)
