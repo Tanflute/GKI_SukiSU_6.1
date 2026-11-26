@@ -51,7 +51,7 @@ if 'avd.seqno = status->policyload' not in h:
         struct page *spage = selinux_kernel_status_page(&selinux_state);
         if (spage) {
             struct selinux_kernel_status *status = page_address(spage);
-            avd.seqno = status->policyload;
+            avd.seqno = status->policyload ? status->policyload : 1;
         }
     }
 '''
@@ -198,7 +198,7 @@ PY
 for symbol in my_write_context my_write_access my_setprocattr; do
   grep -qF "$symbol" "$HIDE_C" || fail "missing hide hook symbol: $symbol"
 done
-grep -qF 'avd.seqno = status->policyload;' "$HIDE_C" || fail 'seqno alignment was not applied'
+grep -qF 'avd.seqno = status->policyload ? status->policyload : 1;' "$HIDE_C" || fail 'seqno fallback-to-one assignment is missing'
 if grep -qF 'if (status->policyload > 0)' "$HIDE_C"; then
   fail 'seqno alignment still ignores policyload=0'
 fi

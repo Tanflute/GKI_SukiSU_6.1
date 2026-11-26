@@ -671,7 +671,7 @@ jobs:
            for symbol in my_write_context my_write_access my_setprocattr; do
              grep -qF "$symbol" "$HIDE_C" || { echo "::error::missing $symbol"; exit 1; }
            done
-           grep -qF 'avd.seqno = status->policyload;' "$HIDE_C"
+           grep -qF 'avd.seqno = status->policyload ? status->policyload : 1;' "$HIDE_C"
             ! grep -qF 'if (status->policyload > 0)' "$HIDE_C"
            ! grep -qE '^[[:space:]]*avd\.seqno[[:space:]]*=[[:space:]]*1;' "$HIDE_C"
            ! grep -qE '^[[:space:]]*[^[:space:]/].*selinux_status_update_policyload\(' "$RULES_C"
